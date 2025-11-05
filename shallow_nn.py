@@ -9,7 +9,7 @@ class Wave3D(nn.Module):
         self.position_weights = nn.Parameter(torch.randn((3, width)))
         self.output_weights = nn.Linear(width, 1)
         self.c = c
-        
+        self.activation = nn.ReLU()
 
     def forward(self, t, x, y, z) -> torch.Tensor:
 
@@ -17,7 +17,9 @@ class Wave3D(nn.Module):
 
         time_out = t @ torch.sqrt(self.c*(self.position_weights**2).sum(0, keepdim=True))
 
-        return self.output_weights(time_out + pos_out)
+        return self.output_weights(
+            self.activation(time_out + pos_out)
+        )
     
     def u(self, t, x, y, z) -> torch.Tensor:
         return self.forward(t, x, y, z)
