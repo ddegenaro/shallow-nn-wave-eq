@@ -7,9 +7,13 @@ class WaveLoss(_WeightedLoss):
     def __init__(self, weight: torch.Tensor):
         super().__init__(weight)
 
-    def forward(self, input: torch.Tensor, target: torch.Tensor):
-        pass
-
+    def forward( # TODO: incorporate first derivative here or directly in Wave module
+        self,
+        input: torch.Tensor,
+        target: torch.Tensor # TODO: likely need more args for initial conditions
+    ):
+        data_loss = self.weight[0] * F.mse_loss(input, target)
+        return 0 + data_loss # TODO: weight and sum losses
 
 
 class Wave(nn.Module):
