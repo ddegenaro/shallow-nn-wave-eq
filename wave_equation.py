@@ -16,6 +16,7 @@ class WaveLoss(_WeightedLoss):
         return 0 + data_loss # TODO: weight and sum losses
 
 
+
 class Wave(nn.Module):
 
     def __init__(
