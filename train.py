@@ -123,6 +123,7 @@ def main(args):
     os.makedirs(os.path.join('experiments', this_experiment))
 
     hparams = vars(args)
+    hparams['param_count'] = sum([p.numel() for p in model.parameters()])
     json.dump(
         hparams,
         open(
@@ -143,8 +144,6 @@ def main(args):
             'w+', encoding='utf-8'
         ) as fp:
             fp.write('epoch\ttraining_time\tval_time\n')
-
-    last_mse = torch.inf
 
     for epoch in range(args.epochs):
         mse, training_time, val_time = train_epoch(
@@ -176,11 +175,9 @@ def main(args):
             os.path.join('experiments', this_experiment, 'model.pth')
         )
 
-        if mse < last_mse: # must improve to break
-            if last_mse - mse < args.tol:
-                print(f'Stopping early at epoch {epoch+1}.')
-                break
-        last_mse = mse
+        if mse < args.tol: # must improve to break
+            print(f'Stopping early at epoch {epoch+1}.')
+            break
 
     print('Done.')
     print(f'Results can be found at {os.path.join('experiments', this_experiment)}.')
@@ -222,7 +219,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--width',
         type=int,
-        default=10,
+        default=1000,
         help='Width of the hidden layer of the neural network. Default 10.'
     )
     parser.add_argument(
@@ -304,8 +301,8 @@ if __name__ == "__main__":
     parser.add_argument(
         '--tol',
         type=float,
-        default=1e-4,
-        help='Minimum difference in MSE between two epochs to continue training.'
+        default=8e-5,
+        help='Stop training if MSE is less than this tolerance.'
     )
 
     args = parser.parse_args()
