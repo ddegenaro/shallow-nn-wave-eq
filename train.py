@@ -26,7 +26,7 @@ def train_epoch(
     es = epoch + 1
     print(f'Epoch {es}/{epochs}.', end='\r')
     model.train()
-    tl = 0.
+    total_loss_train = 0.
 
     if verbose:
         enum_train_loader = enumerate(tqdm(train_loader))
@@ -44,23 +44,25 @@ def train_epoch(
         optimizer.step()
 
         lv = loss.item()
-        tl += lv
+        total_loss_train += lv
         s = i + 1
         if s % log_freq == 0:
-            al = tl / s
+            al = total_loss_train / s
             print(f'Epoch: {es:02d} - Step: {s:04d} - Loss: {lv:.4f} - Avg/tok: {al:.4f}')
 
     model.eval()
-    tl = 0.
+    total_loss_val = 0.
+    num_examples = 0
 
     for i, (inputs, targets) in enum_val_loader:
         
         outputs = model(inputs[:, 0].unsqueeze(1), inputs[:, 1:])
         loss = loss_fn(outputs, targets.unsqueeze(1))
 
-        tl += loss.item()
+        total_loss_val += loss.item() * targets.shape[0]
+        num_examples += targets.shape[0]
 
-    return tl
+    return total_loss_val / num_examples
 
 def main(args):
 
@@ -285,7 +287,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--tol',
         type=float,
-        default=1e-4,
+        default=1e-6,
         help='Minimum difference in MSE between two epochs to continue training.'
     )
 
