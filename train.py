@@ -304,7 +304,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--tol',
         type=float,
-        default=1e-12,
+        default=1e-4,
         help='Minimum difference in MSE between two epochs to continue training.'
     )
 
