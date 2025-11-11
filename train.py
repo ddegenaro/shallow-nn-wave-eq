@@ -1,6 +1,7 @@
 import os
 import json
 import argparse
+from time import time
 
 from tqdm import tqdm
 import torch
@@ -24,7 +25,7 @@ def train_epoch(
 ) -> float:
     
     es = epoch + 1
-    print(f'Epoch {es}/{epochs}.', end='\r')
+    print(f'Epoch {es}/{epochs}...', end='\r')
     model.train()
     total_loss_train = 0.
 
@@ -35,6 +36,7 @@ def train_epoch(
         enum_train_loader = enumerate(train_loader)
         enum_val_loader = enumerate(val_loader)
 
+    training_start = time()
     for i, (inputs, targets) in enum_train_loader:
 
         optimizer.zero_grad()
@@ -48,12 +50,14 @@ def train_epoch(
         s = i + 1
         if s % log_freq == 0:
             al = total_loss_train / s
-            print(f'Epoch: {es:02d} - Step: {s:04d} - Loss: {lv:.4f} - Avg/tok: {al:.4f}')
+            print(f'Epoch: {es:02d} - Step: {s:04d} - Loss: {lv:.4f} - Avg: {al:.4f}')
+    training_time = time() - training_start
 
     model.eval()
     total_loss_val = 0.
     num_examples = 0
 
+    val_start = time()
     for i, (inputs, targets) in enum_val_loader:
         
         outputs = model(inputs[:, 0].unsqueeze(1), inputs[:, 1:])
@@ -61,8 +65,9 @@ def train_epoch(
 
         total_loss_val += loss.item() * targets.shape[0]
         num_examples += targets.shape[0]
+    val_time = time() - val_start
 
-    return total_loss_val / num_examples
+    return (total_loss_val / num_examples) / (len(val_loader)), training_time, val_time
 
 def main(args):
 
@@ -133,10 +138,16 @@ def main(args):
     ) as fp:
         fp.write('epoch\tmse\n')
 
+    with open(
+            os.path.join('experiments', this_experiment, 'time.tsv'),
+            'w+', encoding='utf-8'
+        ) as fp:
+            fp.write('epoch\ttraining_time\tval_time\n')
+
     last_mse = torch.inf
 
     for epoch in range(args.epochs):
-        mse = train_epoch(
+        mse, training_time, val_time = train_epoch(
             train_loader=train_loader,
             val_loader=val_loader,
             model=model,
@@ -146,13 +157,19 @@ def main(args):
             epochs=args.epochs,
             log_freq=args.log_freq,
             verbose=args.verbose
-        ) / (len(val_loader))
+        )
 
         with open(
             os.path.join('experiments', this_experiment, 'mse.tsv'),
             'a', encoding='utf-8'
         ) as fp:
             fp.write(f'{epoch+1}\t{mse}\n')
+
+        with open(
+            os.path.join('experiments', this_experiment, 'time.tsv'),
+            'a', encoding='utf-8'
+        ) as fp:
+            fp.write(f'{epoch+1}\t{training_time}\t{val_time}\n')
 
         torch.save(
             model.state_dict(),
@@ -187,7 +204,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--n_train',
         type=int,
-        default=1_000,
+        default=100_000,
         help='Number of samples to generate for training. Default 1,000.'
     )
     parser.add_argument(
@@ -287,7 +304,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--tol',
         type=float,
-        default=1e-6,
+        default=1e-12,
         help='Minimum difference in MSE between two epochs to continue training.'
     )
 
