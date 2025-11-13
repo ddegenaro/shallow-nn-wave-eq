@@ -7,7 +7,8 @@ def random_data(
     spatial_dim: int = 2,
     mins: list[float] = [0., 0., 0.],
     maxes: list[float] = [1., 1., 1.],
-    f: Callable = None
+    f: Callable = None,
+    noise_scale: float = 1e-3
 ) -> tuple[torch.Tensor, Union[torch.Tensor, None]]:
     
     """
@@ -38,6 +39,8 @@ def random_data(
         sample[i, :] += mins[i]
 
     if f is not None:
-        return sample.transpose(0, -1), f(*sample).transpose(0, -1)
+        targets: torch.Tensor = f(*sample).transpose(0, -1)
+        targets += torch.randn(*targets.shape) * noise_scale
+        return sample.transpose(0, -1), targets
     else:
         return sample.transpose(0, -1), None

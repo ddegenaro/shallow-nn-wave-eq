@@ -48,7 +48,7 @@ if __name__ == "__main__":
     c = 1.
     input_dim = 3
     output_dim = 1
-    activation = nn.ELU()
+    activation = nn.ELU() # TODO: is ReLU okay?
 
     # predict at some random times/places
     t, x = (

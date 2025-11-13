@@ -2,6 +2,7 @@ import os
 import json
 import argparse
 from time import time
+from inspect import signature
 
 from tqdm import tqdm
 import torch
@@ -9,8 +10,11 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from data_sampler import random_data
-from function import f
+from function import u, c
 from wave_equation import Wave
+from utils import DEVICE
+
+torch.manual_seed(42)
 
 def train_epoch(
     train_loader: DataLoader,
@@ -38,6 +42,8 @@ def train_epoch(
 
     training_start = time()
     for i, (inputs, targets) in enum_train_loader:
+        
+        inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
 
         optimizer.zero_grad()
         outputs = model(inputs[:, 0].unsqueeze(1), inputs[:, 1:])
@@ -60,6 +66,8 @@ def train_epoch(
     val_start = time()
     for i, (inputs, targets) in enum_val_loader:
         
+        inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
+        
         outputs = model(inputs[:, 0].unsqueeze(1), inputs[:, 1:])
         loss = loss_fn(outputs, targets.unsqueeze(1))
 
@@ -80,7 +88,8 @@ def main(args):
                 spatial_dim=args.input_dim,
                 mins=args.train_mins,
                 maxes=args.train_maxes,
-                f=f
+                f=u,
+                noise_scale=args.noise_scale
             )
         ),
         batch_size=args.batch_size,
@@ -94,7 +103,8 @@ def main(args):
                 spatial_dim=args.input_dim,
                 mins=args.val_mins,
                 maxes=args.val_maxes,
-                f=f
+                f=u,
+                noise_scale=args.noise_scale
             )
         ),
         batch_size=args.batch_size,
@@ -106,7 +116,7 @@ def main(args):
         c=args.c,
         input_dim=args.input_dim,
         output_dim=args.output_dim
-    )
+    ).to(DEVICE)
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -144,6 +154,10 @@ def main(args):
             'w+', encoding='utf-8'
         ) as fp:
             fp.write('epoch\ttraining_time\tval_time\n')
+            
+    best_loss = torch.inf
+    k = args.k
+    last_k_losses = []
 
     for epoch in range(args.epochs):
         mse, training_time, val_time = train_epoch(
@@ -170,14 +184,32 @@ def main(args):
         ) as fp:
             fp.write(f'{epoch+1}\t{training_time}\t{val_time}\n')
 
-        torch.save(
-            model.state_dict(),
-            os.path.join('experiments', this_experiment, 'model.pth')
-        )
+        if mse < best_loss:
+            torch.save(
+                model.state_dict(),
+                os.path.join('experiments', this_experiment, 'model.pth')
+            )
+            
+            best_loss = mse
 
-        if mse < args.tol: # must improve to break
-            print(f'Stopping early at epoch {epoch+1}.')
-            break
+            if mse < args.tol: # must improve to break
+                print(f'Stopping early at epoch {epoch+1} (mse {mse} < args.tol {args.tol}).')
+                break
+            
+            if len(last_k_losses) == k:
+                last_k_losses_tensor = torch.tensor(last_k_losses)
+                if torch.allclose(
+                    last_k_losses_tensor,
+                    last_k_losses_tensor.mean(),
+                    atol=args.atol
+                ):
+                    print(f'Stopping early at epoch {epoch+1} (last k losses: {last_k_losses}).')
+                    break
+            
+        if len(last_k_losses) == k:
+            del last_k_losses[0]
+        
+        last_k_losses.append(mse)
 
     print('Done.')
     print(f'Results can be found at {os.path.join('experiments', this_experiment)}.')
@@ -197,6 +229,10 @@ def validate(args):
     assert args.tol > 0
 
 if __name__ == "__main__":
+
+    # inferring dimension from f
+    input_dim = len(signature(u).parameters) - 1
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--n_train',
@@ -220,47 +256,53 @@ if __name__ == "__main__":
         '--width',
         type=int,
         default=1000,
-        help='Width of the hidden layer of the neural network. Default 10.'
+        help='Width of the hidden layer of the neural network. Default 1000.'
     )
     parser.add_argument(
         '--c',
         type=float,
-        default=1.,
-        help='Speed of propagation in the medium. Default 1.0.'
+        default=c,
+        help='Speed of propagation in the medium. Default inferred from function.py.'
     )
     parser.add_argument(
         '--input_dim',
         type=int,
-        default=2,
-        help='Number of spatial dimensions to be input. Default 2.'
+        default=input_dim,
+        help='Number of spatial dimensions to be input. Default inferred from function.py.'
     )
     parser.add_argument(
         '--train_mins',
         type=float,
         nargs='+',
-        default=[0., 0., 0.],
+        default=[0.] * (input_dim + 1),
         help='Minimum value for each dimension (training data). First dimension interpreted as time.'
     )
     parser.add_argument(
         '--train_maxes',
         type=float,
         nargs='+',
-        default=[1., 1., 1.],
+        default=[1.] * (input_dim + 1),
         help='Maximum value for each dimension (training data). First dimension interpreted as time.'
     )
     parser.add_argument(
         '--val_mins',
         type=float,
         nargs='+',
-        default=[0., 0., 0.],
+        default=[0.] * (input_dim + 1),
         help='Minimum value for each dimension (validation data). First dimension interpreted as time.'
     )
     parser.add_argument(
         '--val_maxes',
         type=float,
         nargs='+',
-        default=[1., 1., 1.],
+        default=[1.] * (input_dim + 1),
         help='Maximum value for each dimension (validation data). First dimension interpreted as time.'
+    )
+    parser.add_argument(
+        '--noise_scale',
+        type=float,
+        default=1e-3,
+        help='Standard deviation of the noise to be added.'
     )
     parser.add_argument(
         '--output_dim',
@@ -303,6 +345,18 @@ if __name__ == "__main__":
         type=float,
         default=8e-5,
         help='Stop training if MSE is less than this tolerance.'
+    )
+    parser.add_argument(
+        '--atol',
+        type=float,
+        default=1e-4,
+        help='Stop training if MSE is not changing by more than this tolerance.'
+    )
+    parser.add_argument(
+        '--k',
+        type=float,
+        default=3,
+        help='Patience for atol.'
     )
 
     args = parser.parse_args()
