@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 import argparse
 from time import time
 from inspect import signature
@@ -86,8 +87,8 @@ def main(args):
             *random_data(
                 num_samples=args.n_train,
                 spatial_dim=args.input_dim,
-                mins=args.train_mins,
-                maxes=args.train_maxes,
+                mins=args.mins,
+                maxes=args.maxes,
                 f=u,
                 noise_scale=args.noise_scale
             )
@@ -101,8 +102,8 @@ def main(args):
             *random_data(
                 num_samples=args.n_val,
                 spatial_dim=args.input_dim,
-                mins=args.val_mins,
-                maxes=args.val_maxes,
+                mins=args.mins,
+                maxes=args.maxes,
                 f=u,
                 noise_scale=args.noise_scale
             )
@@ -142,6 +143,8 @@ def main(args):
         ),
         indent=4
     )
+    
+    shutil.copyfile('function.py',  os.path.join('experiments', this_experiment, f'f.py'))
 
     with open(
         os.path.join('experiments', this_experiment, 'mse.tsv'),
@@ -271,37 +274,23 @@ if __name__ == "__main__":
         help='Number of spatial dimensions to be input. Default inferred from function.py.'
     )
     parser.add_argument(
-        '--train_mins',
+        '--mins',
         type=float,
         nargs='+',
         default=[0.] * (input_dim + 1),
-        help='Minimum value for each dimension (training data). First dimension interpreted as time.'
+        help='Minimum value for each dimension. First dimension interpreted as time.'
     )
     parser.add_argument(
-        '--train_maxes',
+        '--maxes',
         type=float,
         nargs='+',
         default=[1.] * (input_dim + 1),
-        help='Maximum value for each dimension (training data). First dimension interpreted as time.'
-    )
-    parser.add_argument(
-        '--val_mins',
-        type=float,
-        nargs='+',
-        default=[0.] * (input_dim + 1),
-        help='Minimum value for each dimension (validation data). First dimension interpreted as time.'
-    )
-    parser.add_argument(
-        '--val_maxes',
-        type=float,
-        nargs='+',
-        default=[1.] * (input_dim + 1),
-        help='Maximum value for each dimension (validation data). First dimension interpreted as time.'
+        help='Maximum value for each dimension. First dimension interpreted as time.'
     )
     parser.add_argument(
         '--noise_scale',
         type=float,
-        default=1e-3,
+        default=1e-4,
         help='Standard deviation of the noise to be added.'
     )
     parser.add_argument(
@@ -319,7 +308,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--lr',
         type=float,
-        default=1e-1,
+        default=1e-2,
         help='Learning rate.'
     )
     parser.add_argument(
@@ -355,7 +344,7 @@ if __name__ == "__main__":
     parser.add_argument(
         '--k',
         type=float,
-        default=3,
+        default=10,
         help='Patience for atol.'
     )
 
